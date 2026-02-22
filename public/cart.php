@@ -1,76 +1,41 @@
 <?php
 require_once __DIR__ . "/../includes/config.php";
 require_once __DIR__ . "/../includes/db.php";
-require_once __DIR__ . "/../includes/header.php";
+require_once __DIR__ . "/../app/Controllers/CartController.php";
+
+$pdo = db();
+$controller = new CartController($pdo);
 
 // =========================
-// HANDLE CREATE (Add to Cart)
-// =========================
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['product_id'])) {
-
-    $product_id = (int) $_POST['product_id'];
-    $price = (float) $_POST['price'];
-    $quantity = (int) $_POST['quantity'];
-
-    if ($quantity > 0) {
-        $stmt = db()->prepare("
-            INSERT INTO cart_items (product_id, quantity, price)
-            VALUES (?, ?, ?)
-        ");
-        $stmt->execute([$product_id, $quantity, $price]);
-    }
-}
-
-// =========================
-// HANDLE UPDATE (Change Quantity)
+// HANDLE UPDATE
 // =========================
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_id'])) {
-
     $update_id = (int) $_POST['update_id'];
     $new_quantity = (int) $_POST['new_quantity'];
 
-    if ($new_quantity > 0) {
-        $stmt = db()->prepare("UPDATE cart_items SET quantity = ? WHERE id = ?");
-        $stmt->execute([$new_quantity, $update_id]);
-    }
+    $controller->updateQuantity($update_id, $new_quantity);
+    header("Location: cart.php");
+    exit;
 }
 
 // =========================
-// HANDLE DELETE (Remove Item)
+// HANDLE REMOVE
 // =========================
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['remove_id'])) {
-
     $remove_id = (int) $_POST['remove_id'];
 
-    $stmt = db()->prepare("DELETE FROM cart_items WHERE id = ?");
-    $stmt->execute([$remove_id]);
+    $controller->remove($remove_id);
+    header("Location: cart.php");
+    exit;
 }
 
 // =========================
-// FETCH CART ITEMS (READ)
+// FETCH DATA FROM CONTROLLER
 // =========================
-$stmt = db()->query("
-    SELECT c.id, c.product_id, c.quantity, c.price,
-           (c.quantity * c.price) AS line_total,
-           p.name
-    FROM cart_items c
-    JOIN products p ON c.product_id = p.id
-    ORDER BY c.added_at DESC
-");
+$cartItems = $controller->index();
+$totals = $controller->totals();
 
-$cartItems = $stmt->fetchAll();
-
-// =========================
-// CALCULATE TOTALS
-// =========================
-$subtotal = 0;
-foreach ($cartItems as $item) {
-    $subtotal += $item['line_total'];
-}
-
-$tax = $subtotal * 0.07;
-$shipping = $subtotal > 0 ? 5.99 : 0;
-$total = $subtotal + $tax + $shipping;
+require_once __DIR__ . "/../includes/header.php";
 ?>
 
 <h2>Shopping Cart</h2>
@@ -105,9 +70,7 @@ $total = $subtotal + $tax + $shipping;
                 <td>$<?= htmlspecialchars($item['price']) ?></td>
                 <td>$<?= number_format($item['line_total'], 2) ?></td>
 
-                <td>
-                    <!-- Empty cell for spacing alignment -->
-                </td>
+                <td></td>
 
                 <td>
                     <form method="POST">
@@ -120,10 +83,10 @@ $total = $subtotal + $tax + $shipping;
     </table>
 
     <h3>Totals</h3>
-    <p>Subtotal: $<?= number_format($subtotal, 2) ?></p>
-    <p>Tax (7%): $<?= number_format($tax, 2) ?></p>
-    <p>Shipping: $<?= number_format($shipping, 2) ?></p>
-    <p><strong>Order Total: $<?= number_format($total, 2) ?></strong></p>
+    <p>Subtotal: $<?= number_format($totals['subtotal'], 2) ?></p>
+    <p>Tax (7%): $<?= number_format($totals['tax'], 2) ?></p>
+    <p>Shipping: $<?= number_format($totals['shipping'], 2) ?></p>
+    <p><strong>Order Total: $<?= number_format($totals['total'], 2) ?></strong></p>
 <?php endif; ?>
 
 <?php require_once __DIR__ . "/../includes/footer.php"; ?>
